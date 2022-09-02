@@ -103,7 +103,8 @@ sindy_library = ps.PolynomialLibrary() # It's modified to be ordered correctly r
 # Differentiation methods
 diffs = {
     'SFD': ps.SmoothedFiniteDifference(),
-    'Spline': ps.SINDyDerivative(kind='spline', s=1e-0)
+    'Spline': ps.SINDyDerivative(kind='spline', s=1e-0),
+    'FD' : ps.FiniteDifference(order=3,d=2,drop_endpoints=True),
 }
 
 # Some global parameters
@@ -113,28 +114,28 @@ feature_names = ['x{}'.format(i) for i in range(n_targets)]
 make_predictions = True # make predictions?
 make_graphs = True      # make graphs?
 
-noise = 2           # mean Gaussian
-cov_off_diag_vs_diag_ampl = 0.5
-noise_type = 2 # 1, 2
+noise = 0.0           # mean Gaussian
+cov_off_diag_vs_diag_ampl = 0
+noise_type = 1 # 1, 2
 
 num_of_all_data_points = 100000#zadt0.01 #30000zadt0.005split10 # number of all data points leaded (take the last part of loaded data points)
 sparsification_factor = 10 # take every sparsification_factor point of the loaded sample
 
-cv_type = 'predefined_split' #'time_split_series'
-slice_factor = 8 #10  # the data will be divided into slice_factor sets of training data and 1 test data set i.e.
+cv_type = 'time_split_series' #'time_split_series' or 'predefined_split'
+slice_factor = 9 #10  # the data will be divided into slice_factor sets of training data and 1 test data set i.e.
                   # the data will be divided into (slice_factor+1) equally big sets
 test_size = 1000 # num. of points for the test size
 
 
 # SINDy parameters
-diff_method = 'SFD' # # 'Spline' or 'SFD'
+diff_method = 'SFD' # # 'Spline' or 'SFD' or 'FD'
 max_iter = 30
 
 # STLSQ parameters
 param_grid_STLSQ = {
     "optimizer__threshold": [0.001, 0.01, 0.1],
-    "optimizer__alpha": [0.001, 0.01, 0.1],
-    "optimizer__max_iter" : [max_iter]
+    "optimizer__alpha":  [0.001, 0.01, 0.1],
+    "optimizer__max_iter" : [max_iter] #[i for i in range(1,30)]
 }
 
 # SC3 parameters
@@ -167,6 +168,8 @@ param_grid_trapSR3 = {
 
 # Load evaluated trajectory
 eval_path = "data/L05_2_{'N': 20, 'K': 2, 'F': 30}/eval_[20, 2, 30, 0.001, 10000]_d70a3db09d46e5f3472bf12b4303610c042d5df4.pkl"
+# eval_path = "data/eval_{'N': 20, 'K': 2, 'F': 30, 'dt': 0.001, 't1': 1000.0}_f65e47e20531df16d919cbbfd3ce001f1405b727_1659731820.6279635.pkl"
+#eval_path = "eval"
 with open(eval_path, 'rb') as inp_eval:
     ev = pickle.load(inp_eval)
     del inp_eval
@@ -177,11 +180,13 @@ if len(ev.t) < num_of_all_data_points:
                      'than num_of_used_data_points (={})'.format(len(ev.t), num_of_all_data_points))
 t = ev.t[:num_of_all_data_points:sparsification_factor]
 x = ev.y.T[-num_of_all_data_points::sparsification_factor]
+print(x.shape)
 del ev
 dt = t[1] - t[0]
 num_of_used_data_points = int(num_of_all_data_points / sparsification_factor)
 if cv_type == 'time_split_series':
-    test_size = int(num_of_used_data_points / (slice_factor+1))
+    if test_size > int(num_of_used_data_points / (slice_factor+1)):
+        raise ValueError('test_size too big')
 
 # -------------- add noise on data --------------------
 
@@ -223,7 +228,7 @@ if cv_type == 'predefined_split':
     print('Test size: ', test_size)
     print('Max iter: ', max_iter)
 elif cv_type == 'time_split_series':
-    TimeSeriesSplit(n_splits=slice_factor)
+    cv = TimeSeriesSplit(n_splits=slice_factor,  test_size=test_size)
     print('\n####################################################\n')
     print('Diff. method: ', diff_method)
     print('Noise: ', noise, '(mean gaussian)')
@@ -232,7 +237,8 @@ elif cv_type == 'time_split_series':
     print('dt: ', dt)
     print('Num. of data points: ', num_of_used_data_points)
     print('slice_factor: {}'.format(slice_factor), '(=num. of training data sets)')
-    print('Chunk size (=test size): ', test_size)
+    print('Chunk size: ', (num_of_used_data_points - test_size) / slice_factor)
+    print('Test size): ', test_size)
     print('Max iter: ', max_iter)
 else:
     raise ValueError("cv_type not 'predefined_split' or 'time_split_series'")
@@ -300,7 +306,7 @@ if False:
         del outp
         del search, results
 
-# STLS Poly2
+# STLSQ Poly2
 if True:
 
     print('\n####################################################\n')
@@ -420,7 +426,7 @@ if False:
         del search, results
 
 # Constrained SR3
-if True:
+if False:
 
     print('\n####################################################\n')
     print('Constrained SR3 model, energy preserving quadratic nonliniarities:')
@@ -568,6 +574,4 @@ print('----------------------------\n')
 
 
 
-
-# nujno implementiri še kšn drug score
 
